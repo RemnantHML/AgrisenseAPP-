@@ -29,3 +29,42 @@ export const amendments = (avg, crop) =>
     const low = avg[k] < TH[crop][k][0];
     return { k, low, value: avg[k], range: TH[crop][k], tip: SUG[k][low ? 0 : 1] };
   });
+
+// Status labels from SystemRules.docx (Rules 1-3). Exported so later code can
+// compare against these constants instead of retyping the text.
+export const THRESHOLD_STATUS = {
+  WITHIN: 'Within Threshold',
+  BELOW: 'Below Threshold',
+  ABOVE: 'Above Threshold',
+};
+
+// Evaluates EVERY crop in TH against the supplied averages, one parameter at a
+// time, and keeps the full details. Pure: reads its input, changes nothing, has
+// no side effects. Does not round: it compares exactly the numbers it receives.
+// Returns null when the averages are missing or invalid (same convention as
+// average(), which returns null until all sampling areas are collected).
+export function evaluateCrops(avg) {
+  if (!avg) return null;
+  const hasAllValues = PARAMS.every(({ k }) => typeof avg[k] === 'number' && Number.isFinite(avg[k]));
+  if (!hasAllValues) return null;
+
+  return Object.keys(TH).map(crop => {
+    const parameters = PARAMS.map(({ k, label, unit }) => {
+      const [minimum, maximum] = TH[crop][k];
+      const measuredValue = avg[k];
+
+      let status = THRESHOLD_STATUS.WITHIN; // minimum <= value <= maximum
+      if (measuredValue < minimum) {
+        status = THRESHOLD_STATUS.BELOW;
+      } else if (measuredValue > maximum) {
+        status = THRESHOLD_STATUS.ABOVE;
+      }
+
+      return { key: k, label, unit, measuredValue, minimum, maximum, status };
+    });
+
+    const failedParameters = parameters.filter(p => p.status !== THRESHOLD_STATUS.WITHIN);
+
+    return { crop, compatible: failedParameters.length === 0, parameters, failedParameters };
+  });
+}
