@@ -26,6 +26,13 @@ export const Btn = ({ title, onPress, outline, disabled, danger, style }) => (
   </TouchableOpacity>
 );
 
+// Display-only formatting for AVERAGED values. Shows up to 6 decimal places and
+// removes unnecessary trailing zeros (177.000000 -> 177, 177.2 -> 177.2,
+// 149.999999 stays 149.999999). It never decides a threshold status; it only
+// changes how a number is printed. Anything that is not a finite number shows as an em dash.
+export const formatValue = value =>
+  typeof value === 'number' && Number.isFinite(value) ? String(Number(value.toFixed(6))) : '—';
+
 const s = StyleSheet.create({
   h1: { fontSize: 22, fontWeight: '700', color: C.ink, marginBottom: 6 },
   h2: { fontSize: 15, fontWeight: '700', color: C.ink, marginTop: 16, marginBottom: 8 },

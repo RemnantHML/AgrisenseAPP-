@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { Screen, H1, H2, P, Card, Row, Tag, Btn, C } from './ui';
+import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
 import { useApp } from './store';
 import { PARAMS, TH, ICON, N_AREAS } from './data';
 import { average, failed, compatibleCrops, amendments, validate } from './analysis';
@@ -286,7 +286,7 @@ export function Average({ navigation }) {
         <Card key={parameter.k}>
           <Row>
             <Text>{parameter.label}</Text>
-            <Text style={{ fontWeight: '700' }}>{avg[parameter.k]} {parameter.unit}</Text>
+            <Text style={{ fontWeight: '700' }}>{formatValue(avg[parameter.k])} {parameter.unit}</Text>
           </Row>
         </Card>
       ))}
@@ -350,7 +350,7 @@ export function Amend({ navigation }) {
               <Text style={{ fontWeight: '700' }}>{PARAMS.find(parameter => parameter.k === suggestion.k)?.label || suggestion.k}</Text>
               <Tag text={suggestion.low ? 'Too low' : 'Too high'} kind="bad" />
             </Row>
-            <P>Current {suggestion.value} · target {suggestion.range[0]}–{suggestion.range[1]}</P>
+            <P>Current {formatValue(suggestion.value)} · target {suggestion.range[0]}–{suggestion.range[1]}</P>
             <Text style={{ color: C.ink, marginTop: 4 }}>{suggestion.tip}</Text>
           </Card>
         )) : (
