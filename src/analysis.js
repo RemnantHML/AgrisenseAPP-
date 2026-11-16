@@ -6,14 +6,16 @@ export function validate(r) {
   return PARAMS.every(({ k, max }) => typeof r[k] === 'number' && !isNaN(r[k]) && r[k] >= 0 && r[k] <= max);
 }
 
-// Arithmetic mean per parameter across all sampling points
+// Arithmetic mean per parameter across all sampling points, calculated from the
+// original readings. No display rounding. The only rounding is a 6-decimal
+// cleanup that removes floating-point noise (e.g. 5.499999999999999 -> 5.5).
 export function average(areas) {
   const valid = areas.filter(Boolean);
   if (valid.length < N_AREAS) return null;
   const avg = {};
   PARAMS.forEach(({ k }) => {
     const m = valid.reduce((s, a) => s + a[k], 0) / valid.length;
-    avg[k] = k === 'pH' || k === 'T' ? +m.toFixed(1) : Math.round(m);
+    avg[k] = +m.toFixed(6);
   });
   return avg;
 }
