@@ -2,6 +2,7 @@
   "expo": {
     "name": "AgriSense",
     "slug": "AgriSense",
+    "owner": "bryan2077s-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +29,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "c0d5751c-5d1c-416b-9e33-c8f43938c990"
+        "projectId": "609ce0c2-f658-4630-bef4-fa518fe74bae"
       }
     }
   }
