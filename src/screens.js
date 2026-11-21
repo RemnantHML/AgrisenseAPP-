@@ -10,7 +10,7 @@ import {
 import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
 import { useApp } from './store';
 import { PARAMS, TH, ICON, N_AREAS } from './data';
-import { average, failed, compatibleCrops, amendments, validate } from './analysis';
+import { average, evaluateCrops, failed, compatibleCrops, amendments, validate } from './analysis';
 import { scanDevices, connectDevice, readOnce } from './bluetooth';
 
 export function Splash({ navigation }) {
@@ -277,7 +277,11 @@ export function Average({ navigation }) {
   if (!avg) {
     return <Screen><P>Collect all {N_AREAS} areas first.</P></Screen>;
   }
-  const compatible = compatibleCrops(avg);
+  const evaluation = evaluateCrops(avg);
+  if (!evaluation) {
+    return <Screen><P>The averaged readings could not be evaluated. Retake the readings and try again.</P></Screen>;
+  }
+  const compatible = evaluation.filter(result => result.compatible).map(result => result.crop);
 
   return (
     <Screen>
@@ -292,9 +296,15 @@ export function Average({ navigation }) {
       ))}
       <View style={[st.verdict, { backgroundColor: compatible.length ? C.okbg : C.badbg }]}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: compatible.length ? C.ok : C.bad }}>
-          {compatible.length ? `${compatible.length} of 5 crops compatible` : 'No crop fully compatible'}
+          {compatible.length
+            ? `${compatible.length} of ${evaluation.length} crops compatible`
+            : 'No supported crop is compatible based on the six measured parameters.'}
         </Text>
-        <P>{compatible.length ? compatible.join(', ') : 'See amendment suggestions to improve your soil.'}</P>
+        <P>
+          {compatible.length
+            ? compatible.join(', ')
+            : 'Use View recommendations below to open the Crop Recommendation screen and see the flagged parameters and threshold details.'}
+        </P>
       </View>
       <Btn title="View recommendations" onPress={() => navigation.navigate('Crops')} />
     </Screen>
