@@ -422,12 +422,16 @@ export function Sync() {
       <Btn title="Sync now" onPress={async () => {
         try {
           const count = await sync();
-          setMessage(`${count} record(s) synced locally.`);
+          setMessage(
+            count > 0
+              ? `${count} record(s) uploaded to the cloud.`
+              : 'Nothing to upload. All records are already synced.'
+          );
         } catch (error) {
           setMessage(error?.message || 'Sync failed.');
         }
       }} />
-      <P style={{ marginTop: 8 }}>This version stores records on this phone. Cloud sync is not connected to a server yet.</P>
+      <P style={{ marginTop: 8 }}>Records are saved on this phone first. They are uploaded to the cloud only when you tap Sync now with an internet connection.</P>
     </Screen>
   );
 }
