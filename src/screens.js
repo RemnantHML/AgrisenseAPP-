@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
 import { useApp } from './store';
-import { PARAMS, TH, ICON, N_AREAS } from './data';
-import { average, evaluateCrops, failed, compatibleCrops, amendments, validate } from './analysis';
+import { PARAMS, ICON, N_AREAS } from './data';
+import { average, evaluateCrops, compatibleCrops, amendments, validate } from './analysis';
 import { scanDevices, connectDevice, readOnce } from './bluetooth';
 
 export function Splash({ navigation }) {
@@ -315,24 +315,34 @@ export function Crops({ navigation }) {
   const { areas, pref, setPref } = useApp();
   const avg = average(areas);
   if (!avg) return <Screen><P>Collect all {N_AREAS} areas first.</P></Screen>;
+  const evaluation = evaluateCrops(avg);
+  if (!evaluation) {
+    return <Screen><P>The averaged readings could not be evaluated. Retake the readings and try again.</P></Screen>;
+  }
 
   return (
     <Screen>
       <P>Tap a crop to set it as your preferred crop.</P>
       <View style={{ marginTop: 10 }}>
-        {Object.keys(TH).map(crop => {
-          const failures = failed(avg, crop);
-          return (
-            <Card key={crop} onPress={() => setPref(crop)} style={crop === pref ? { borderColor: C.g, borderWidth: 2 } : null}>
-              <Row>
-                <Text style={{ fontSize: 17 }}>{ICON[crop]} <Text style={{ fontWeight: '700' }}>{crop}</Text></Text>
-                <Tag text={failures.length ? `Incompatible · ${failures.length} off` : 'Compatible'} kind={failures.length ? 'bad' : 'ok'} />
-              </Row>
-              {crop === pref && <P>Preferred crop</P>}
-            </Card>
-          );
-        })}
+        {evaluation.map(({ crop, compatible, failedParameters }) => (
+          <Card key={crop} onPress={() => setPref(crop)} style={crop === pref ? { borderColor: C.g, borderWidth: 2 } : null}>
+            <Row>
+              <Text style={{ fontSize: 17 }}>{ICON[crop]} <Text style={{ fontWeight: '700' }}>{crop}</Text></Text>
+              <Tag text={compatible ? 'Compatible' : 'Incompatible'} kind={compatible ? 'ok' : 'bad'} />
+            </Row>
+            {failedParameters.length > 0 && (
+              <View style={{ marginTop: 8 }}>
+                <P style={{ fontWeight: '700', color: C.ink }}>Flagged parameters</P>
+                {failedParameters.map(parameter => (
+                  <P key={parameter.key}>• {parameter.label} – {parameter.status}</P>
+                ))}
+              </View>
+            )}
+            {crop === pref && <P>Preferred crop</P>}
+          </Card>
+        ))}
       </View>
+      <P style={{ textAlign: 'center', marginTop: 8 }}>Compatibility is based only on the six measured parameters.</P>
       <Btn title="View soil amendment suggestions" onPress={() => navigation.navigate('Amend')} />
     </Screen>
   );
