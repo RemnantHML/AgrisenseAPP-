@@ -1,3 +1,4 @@
+export const THRESHOLDS_VERSION = 'prelim-2026-05'; // bump when thresholds change
 export const N_AREAS = 5; // 5 sampling points per hectare (zigzag/W pattern)
 
 export const PARAMS = [
