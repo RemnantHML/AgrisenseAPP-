@@ -11,6 +11,7 @@ import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
 import { useApp } from './store';
 import { PARAMS, ICON, N_AREAS } from './data';
 import { average, evaluateCrops, compatibleCrops, amendments, validate } from './analysis';
+import { currentSeason } from './season';
 import { scanDevices, connectDevice, readOnce } from './bluetooth';
 
 export function Splash({ navigation }) {
@@ -322,7 +323,8 @@ export function Crops({ navigation }) {
 
   return (
     <Screen>
-      <P>Tap a crop to set it as your preferred crop.</P>
+      <P>Current season: <Text style={{ fontWeight: '700' }}>{currentSeason()}</Text></P>
+      <P style={{ marginTop: 6 }}>Tap a crop to set it as your preferred crop.</P>
       <View style={{ marginTop: 10 }}>
         {evaluation.map(({ crop, compatible, failedParameters }) => (
           <Card key={crop} onPress={() => setPref(crop)} style={crop === pref ? { borderColor: C.g, borderWidth: 2 } : null}>
@@ -362,7 +364,8 @@ export function Amend({ navigation }) {
 
   return (
     <Screen>
-      <P>Preferred crop: <Text style={{ fontWeight: '700' }}>{ICON[pref]} {pref}</Text></P>
+      <P>Current season: <Text style={{ fontWeight: '700' }}>{currentSeason()}</Text></P>
+      <P style={{ marginTop: 6 }}>Preferred crop: <Text style={{ fontWeight: '700' }}>{ICON[pref]} {pref}</Text></P>
       <View style={{ marginTop: 10 }}>
         {suggestions.length ? suggestions.map(suggestion => (
           <Card key={suggestion.k}>
