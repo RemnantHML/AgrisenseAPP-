@@ -388,13 +388,13 @@ export function Amend({ navigation }) {
   );
 }
 
-export function Records() {
+export function Records({ navigation }) {
   const { records } = useApp();
   return (
     <Screen>
       <H1>Monitoring records</H1>
       {records.length ? records.map(record => (
-        <Card key={record.id}>
+        <Card key={record.id} onPress={() => navigation.navigate('RecordDetail', { id: record.id })}>
           <Row>
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: '700' }}>{record.name}</Text>
@@ -405,6 +405,64 @@ export function Records() {
           </Row>
         </Card>
       )) : <P>No records yet. Complete a monitoring session and tap Save assessment.</P>}
+    </Screen>
+  );
+}
+
+const DetailRow = ({ label, value }) => (
+  <Row style={{ marginTop: 8 }}>
+    <Text style={{ flex: 1 }}>{label}</Text>
+    <Text style={{ flex: 1, fontWeight: '700', textAlign: 'right' }}>{value}</Text>
+  </Row>
+);
+
+export function RecordDetail({ route }) {
+  const { records } = useApp();
+  const record = records.find(item => item.id === route.params?.id);
+  if (!record) {
+    return <Screen><P>This record could not be found.</P></Screen>;
+  }
+
+  const savedDate = new Date(record.date);
+  const dateText = Number.isNaN(savedDate.getTime()) ? 'Unknown' : savedDate.toLocaleString();
+  const preferredText = record.pref ? `${ICON[record.pref] || ''} ${record.pref}`.trim() : 'Not recorded';
+  const compatibleText = Array.isArray(record.compatible) && record.compatible.length
+    ? record.compatible.join(', ')
+    : 'None';
+
+  return (
+    <Screen>
+      <H2>Assessment</H2>
+      <Card>
+        <DetailRow label="Assessment name" value={record.name || 'Untitled session'} />
+        <DetailRow label="Location" value={record.location || 'Not provided'} />
+        <DetailRow label="Date" value={dateText} />
+        <DetailRow label="Preferred crop" value={preferredText} />
+        <DetailRow label="Compatible crops" value={compatibleText} />
+      </Card>
+
+      <H2>Average soil readings</H2>
+      <Card>
+        {PARAMS.map(parameter => (
+          <DetailRow
+            key={parameter.k}
+            label={parameter.label}
+            value={`${formatValue(record.avg?.[parameter.k])} ${parameter.unit}`.trim()}
+          />
+        ))}
+      </Card>
+
+      <H2>Synchronization</H2>
+      <Card>
+        <Row>
+          <Text>Status</Text>
+          <Tag text={record.synced ? 'Synced' : 'On this phone only'} kind={record.synced ? 'ok' : 'warn'} />
+        </Row>
+      </Card>
+
+      <P style={{ textAlign: 'center', marginTop: 8 }}>
+        Amendment suggestions and flagged-parameter details are not stored with saved records.
+      </P>
     </Screen>
   );
 }

@@ -36,6 +36,7 @@ export default function App() {
           <Stack.Screen name="Crops" component={S.Crops} options={{ title: 'Crop recommendation' }} />
           <Stack.Screen name="Amend" component={S.Amend} options={{ title: 'Soil amendments' }} />
           <Stack.Screen name="Sync" component={S.Sync} options={{ title: 'Sync data' }} />
+          <Stack.Screen name="RecordDetail" component={S.RecordDetail} options={{ title: 'Record details' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </AppProvider>
