@@ -19,6 +19,7 @@ export const storageKeys = owner =>
 export function AppProvider({ children }) {
   const [owner, setOwner] = useState(GUEST_OWNER);
   const ownerRef = useRef(GUEST_OWNER); // always the CURRENT owner, even inside slow async work
+  const [loadId, setLoadId] = useState(0); // bumped on every switch so records reload even for the same owner
   const [device, setDevice] = useState(null);
   const [areas, setAreas] = useState(Array(N_AREAS).fill(null));
   const [session, setSession] = useState({ name: '', location: '' });
@@ -34,7 +35,7 @@ export function AppProvider({ children }) {
     AsyncStorage.getItem(keys.records).then(v => { if (!cancelled && v) setRecords(JSON.parse(v)); });
     AsyncStorage.getItem(keys.lastSync).then(v => { if (!cancelled && v) setLastSync(v); });
     return () => { cancelled = true; };
-  }, [owner]);
+  }, [owner, loadId]);
 
   // Switching owner clears only what is held in memory (records on screen, sync time,
   // temporary readings, session text, preferred crop). Stored records are never deleted.
@@ -46,6 +47,7 @@ export function AppProvider({ children }) {
     setSession({ name: '', location: '' });
     setPref('Rice');
     setOwner(nextOwner);
+    setLoadId(id => id + 1);
   };
 
   // Always writes to the storage keys of the owner the data belongs to. The on-screen
@@ -67,7 +69,7 @@ export function AppProvider({ children }) {
     const syncOwner = owner; // remember who started this sync
     const pending = records.filter(r => !r.synced);
     if (!pending.length) return 0;
-    const ids = await pushRecords(pending); // throws if offline, so records stay unsynced
+    const ids = await pushRecords(pending, syncOwner === GUEST_OWNER ? null : syncOwner); // throws if offline, so records stay unsynced
     persist(records.map(r => (ids.includes(r.id) ? { ...r, synced: true } : r)), syncOwner);
     const t = new Date().toISOString();
     if (ownerRef.current === syncOwner) setLastSync(t);

@@ -8,7 +8,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
-import { useApp } from './store';
+import { useApp, GUEST_OWNER } from './store';
+import { registerAccount, signInAccount, resetPassword, prepareGuestSession, friendlyAuthError } from './firebase';
 import { PARAMS, ICON, N_AREAS } from './data';
 import { average, evaluateCrops, compatibleCrops, amendments, validate } from './analysis';
 import { currentSeason } from './season';
@@ -32,23 +33,131 @@ export function Splash({ navigation }) {
   );
 }
 
+const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
+
 export function Login({ navigation }) {
-  const go = () => navigation.replace('Main');
+  const { switchOwner } = useApp();
+  const [mode, setMode] = useState('signin'); // 'signin' | 'register' | 'reset'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null); // { ok: true/false, text: '...' }
+
+  const fail = text => setNotice({ ok: false, text });
+  const changeMode = next => {
+    setMode(next);
+    setNotice(null);
+    setPassword('');
+    setConfirm('');
+  };
+  const enterApp = owner => {
+    switchOwner(owner);
+    navigation.replace('Main');
+  };
+
+  const submit = async () => {
+    const address = email.trim();
+    if (!EMAIL_PATTERN.test(address)) return fail('Enter a valid email address.');
+    if (mode !== 'reset' && !password) return fail('Enter your password.');
+    if (mode === 'register') {
+      if (password.length < 6) return fail('Use a password with at least 6 characters.');
+      if (password !== confirm) return fail('The two passwords do not match.');
+    }
+
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (mode === 'reset') {
+        await resetPassword(address);
+        setBusy(false);
+        setNotice({ ok: true, text: 'If an account exists for this email, a reset link has been sent. Check your inbox and spam folder.' });
+        return;
+      }
+      const user = mode === 'register'
+        ? await registerAccount(address, password)
+        : await signInAccount(address, password);
+      enterApp(user.uid);
+    } catch (error) {
+      setBusy(false);
+      fail(friendlyAuthError(error));
+    }
+  };
+
+  const continueAsGuest = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await prepareGuestSession();
+      enterApp(GUEST_OWNER);
+    } catch (error) {
+      setBusy(false);
+      fail(friendlyAuthError(error));
+    }
+  };
+
+  const titles = {
+    signin: ['Welcome back', 'Log in to continue'],
+    register: ['Create account', 'Register with your email and a password'],
+    reset: ['Reset password', 'Enter your email to receive a reset link'],
+  };
+
   return (
     <Screen>
       <View style={{ paddingTop: 60 }}>
-        <H1>Welcome back</H1>
-        <P>Log in to continue</P>
+        <H1>{titles[mode][0]}</H1>
+        <P>{titles[mode][1]}</P>
         <TextInput
           style={st.input}
-          placeholder="Email or phone number"
+          placeholder="Email"
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+          editable={!busy}
         />
-        <TextInput style={st.input} placeholder="Password" secureTextEntry />
-        <Btn title="Log in" onPress={go} />
-        <Btn title="Register" outline onPress={go} />
-        <Btn title="Continue as guest" outline onPress={go} style={{ borderWidth: 0 }} />
+        {mode !== 'reset' && (
+          <TextInput
+            style={st.input}
+            placeholder="Password"
+            secureTextEntry
+            autoCapitalize="none"
+            value={password}
+            onChangeText={setPassword}
+            editable={!busy}
+          />
+        )}
+        {mode === 'register' && (
+          <TextInput
+            style={st.input}
+            placeholder="Confirm password"
+            secureTextEntry
+            autoCapitalize="none"
+            value={confirm}
+            onChangeText={setConfirm}
+            editable={!busy}
+          />
+        )}
+
+        {notice && <P style={{ marginTop: 10, color: notice.ok ? C.ok : C.bad }}>{notice.text}</P>}
+        {busy && <ActivityIndicator color={C.g} style={{ marginTop: 12 }} />}
+
+        <Btn
+          title={mode === 'signin' ? 'Log in' : mode === 'register' ? 'Register' : 'Send reset email'}
+          onPress={submit}
+          disabled={busy}
+        />
+        {mode === 'signin' && (
+          <>
+            <Btn title="Forgot password?" outline onPress={() => changeMode('reset')} disabled={busy} style={{ borderWidth: 0 }} />
+            <Btn title="Create account" outline onPress={() => changeMode('register')} disabled={busy} />
+          </>
+        )}
+        {mode !== 'signin' && (
+          <Btn title="Back to log in" outline onPress={() => changeMode('signin')} disabled={busy} />
+        )}
+        <Btn title="Continue as guest" outline onPress={continueAsGuest} disabled={busy} style={{ borderWidth: 0 }} />
       </View>
     </Screen>
   );
