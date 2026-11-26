@@ -8,6 +8,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  onAuthStateChanged,
 } from 'firebase/auth';
 import { getDatabase, ref, update, goOnline, goOffline } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -71,6 +72,42 @@ export async function prepareGuestSession() {
   if (auth.currentUser && !auth.currentUser.isAnonymous) {
     await signOut(auth);
   }
+}
+
+// Resolves when Firebase has finished reading any saved sign-in from the phone.
+// Uses authStateReady when the SDK has it, otherwise waits for the first auth-state event.
+const authReady = () =>
+  typeof auth.authStateReady === 'function'
+    ? auth.authStateReady()
+    : new Promise(resolve => {
+        let off = null;
+        let fired = false;
+        off = onAuthStateChanged(auth, () => {
+          fired = true;
+          off?.();
+          resolve();
+        });
+        if (fired) off();
+      });
+
+// Called once when the app starts. Returns { uid, email } if an EMAIL account is still
+// signed in on this phone, otherwise null. Anonymous (guest) sessions are ignored on
+// purpose: guests still land on the login screen. It reads only what is saved on the
+// phone, so it works offline, and it gives up after maxMs so the splash screen never hangs.
+export async function restoreAccountSession(maxMs = 4000) {
+  try {
+    await withTimeout(authReady(), maxMs, 'Session check');
+  } catch {
+    return null;
+  }
+  const user = auth.currentUser;
+  return user && !user.isAnonymous ? { uid: user.uid, email: user.email } : null;
+}
+
+// Email of the signed-in account, or null for guests / nobody signed in.
+export function currentAccountEmail() {
+  const user = auth.currentUser;
+  return user && !user.isAnonymous ? user.email : null;
 }
 
 // Turns a Firebase error into a short message a farmer can act on.

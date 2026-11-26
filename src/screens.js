@@ -9,16 +9,46 @@ import {
 } from 'react-native';
 import { Screen, H1, H2, P, Card, Row, Tag, Btn, C, formatValue } from './ui';
 import { useApp, GUEST_OWNER } from './store';
-import { registerAccount, signInAccount, resetPassword, prepareGuestSession, friendlyAuthError } from './firebase';
+import {
+  registerAccount,
+  signInAccount,
+  resetPassword,
+  prepareGuestSession,
+  friendlyAuthError,
+  restoreAccountSession,
+  signOutAccount,
+  currentAccountEmail,
+} from './firebase';
 import { PARAMS, ICON, N_AREAS } from './data';
 import { average, evaluateCrops, compatibleCrops, amendments, validate } from './analysis';
 import { currentSeason } from './season';
 import { scanDevices, connectDevice, readOnce } from './bluetooth';
 
 export function Splash({ navigation }) {
+  const { switchOwner } = useApp();
+
   useEffect(() => {
-    const timer = setTimeout(() => navigation.replace('Login'), 1500);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    let timer;
+    const minimumSplash = new Promise(resolve => { timer = setTimeout(resolve, 1500); });
+
+    const start = async () => {
+      // Show the splash for at least 1.5 s while checking for a saved email session.
+      const [session] = await Promise.all([restoreAccountSession(4000).catch(() => null), minimumSplash]);
+      if (cancelled) return;
+      if (session) {
+        switchOwner(session.uid);
+        navigation.replace('Main');
+      } else {
+        navigation.replace('Login');
+      }
+    };
+    start();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [navigation]);
 
   return (
@@ -617,14 +647,51 @@ export function Sync() {
 }
 
 export function Profile({ navigation }) {
+  const { owner, records, switchOwner } = useApp();
+  const isGuest = owner === GUEST_OWNER;
+  const email = isGuest ? null : currentAccountEmail();
+  const pending = records.filter(record => !record.synced).length;
+
+  // Signs out of Firebase (accounts only), clears only in-memory state, then shows Login.
+  // Records stored on the phone are never deleted.
+  const leave = async () => {
+    try {
+      if (!isGuest) await signOutAccount();
+      switchOwner(GUEST_OWNER);
+      navigation.getParent()?.replace('Login');
+    } catch {
+      Alert.alert('Could not log out', 'Something went wrong while logging out. Please try again.');
+    }
+  };
+
+  const logOut = () => {
+    if (!pending) {
+      leave();
+      return;
+    }
+    const when = isGuest ? 'the next time you tap Sync now as a guest' : 'the next time you log in and tap Sync now';
+    Alert.alert(
+      'Log out?',
+      `${pending} record(s) are not uploaded yet. They stay on this phone and upload ${when}. Log out anyway?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log out', style: 'destructive', onPress: leave },
+      ]
+    );
+  };
+
   return (
     <Screen>
       <H1>Profile</H1>
-      <Card><Text style={{ fontWeight: '700' }}>Juan Dela Cruz</Text><P>Farmer</P></Card>
+      <Card>
+        <P>{isGuest ? 'Using AgriSense as' : 'Signed in as'}</P>
+        <Text style={{ fontWeight: '700' }}>{isGuest ? 'Guest' : email || 'Email account'}</Text>
+        {isGuest && <P>Guest records stay on this phone until you tap Sync now. They are not linked to an email account.</P>}
+      </Card>
       {['Account settings', 'Device management', 'Units: mg/kg, °C, %', 'About AgriSense'].map(title => (
         <Card key={title}><Text>{title}</Text></Card>
       ))}
-      <Btn title="Log out" outline danger onPress={() => navigation.getParent()?.replace('Login')} />
+      <Btn title="Log out" outline danger onPress={logOut} />
     </Screen>
   );
 }
