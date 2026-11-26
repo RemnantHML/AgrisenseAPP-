@@ -107,9 +107,11 @@ export function Login({ navigation }) {
       <View style={{ paddingTop: 60 }}>
         <H1>{titles[mode][0]}</H1>
         <P>{titles[mode][1]}</P>
+        <P style={{ marginTop: 16, fontWeight: '600', color: C.ink }}>Email</P>
         <TextInput
-          style={st.input}
+          style={[st.input, { marginTop: 4 }]}
           placeholder="Email"
+          accessibilityLabel="Email"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
@@ -118,26 +120,34 @@ export function Login({ navigation }) {
           editable={!busy}
         />
         {mode !== 'reset' && (
-          <TextInput
-            style={st.input}
-            placeholder="Password"
-            secureTextEntry
-            autoCapitalize="none"
-            value={password}
-            onChangeText={setPassword}
-            editable={!busy}
-          />
+          <>
+            <P style={{ marginTop: 12, fontWeight: '600', color: C.ink }}>Password</P>
+            <TextInput
+              style={[st.input, { marginTop: 4 }]}
+              placeholder="Password"
+              accessibilityLabel="Password"
+              secureTextEntry
+              autoCapitalize="none"
+              value={password}
+              onChangeText={setPassword}
+              editable={!busy}
+            />
+          </>
         )}
         {mode === 'register' && (
-          <TextInput
-            style={st.input}
-            placeholder="Confirm password"
-            secureTextEntry
-            autoCapitalize="none"
-            value={confirm}
-            onChangeText={setConfirm}
-            editable={!busy}
-          />
+          <>
+            <P style={{ marginTop: 12, fontWeight: '600', color: C.ink }}>Confirm password</P>
+            <TextInput
+              style={[st.input, { marginTop: 4 }]}
+              placeholder="Confirm password"
+              accessibilityLabel="Confirm password"
+              secureTextEntry
+              autoCapitalize="none"
+              value={confirm}
+              onChangeText={setConfirm}
+              editable={!busy}
+            />
+          </>
         )}
 
         {notice && <P style={{ marginTop: 10, color: notice.ok ? C.ok : C.bad }}>{notice.text}</P>}
