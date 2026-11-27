@@ -611,6 +611,33 @@ export function RecordDetail({ route }) {
         ))}
       </Card>
 
+      <H2>Amendment recommendations</H2>
+      {Array.isArray(record.amendments) ? (
+        record.amendments.length ? (
+          record.amendments.map((item, index) => (
+            <Card key={item.key || index}>
+              <Row>
+                <Text style={{ fontWeight: '700', flex: 1 }}>{item.label || item.key}</Text>
+                {item.status ? <Tag text={item.status} kind="bad" /> : null}
+              </Row>
+              <P>
+                Measured {formatValue(item.value)}
+                {Array.isArray(item.range) && item.range.length === 2 ? ` · target ${item.range[0]}–${item.range[1]}` : ''}
+              </P>
+              {item.tip ? <Text style={{ color: C.ink, marginTop: 4 }}>{item.tip}</Text> : null}
+            </Card>
+          ))
+        ) : (
+          <View style={[st.verdict, { backgroundColor: C.okbg }]}>
+            <Text style={{ fontWeight: '700', color: C.ok }}>Your soil is compatible. No amendments needed.</Text>
+          </View>
+        )
+      ) : (
+        <Card>
+          <P>Amendment recommendations were not saved with this record.</P>
+        </Card>
+      )}
+
       <H2>Synchronization</H2>
       <Card>
         <Row>
@@ -618,10 +645,6 @@ export function RecordDetail({ route }) {
           <Tag text={record.synced ? 'Synced' : 'On this phone only'} kind={record.synced ? 'ok' : 'warn'} />
         </Row>
       </Card>
-
-      <P style={{ textAlign: 'center', marginTop: 8 }}>
-        Amendment suggestions and flagged-parameter details are not stored with saved records.
-      </P>
     </Screen>
   );
 }
