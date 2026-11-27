@@ -57,9 +57,12 @@ export function AppProvider({ children }) {
     AsyncStorage.setItem(storageKeys(forOwner).records, JSON.stringify(next));
   };
 
-  const saveRecord = (avg, compatible) => {
+  // amendments = the recommendations exactly as they were displayed when the user saved.
+  // Older records (and callers that pass nothing) simply have no "amendments" field.
+  const saveRecord = (avg, compatible, amendments) => {
     persist([{ id: String(Date.now()), name: session.name || 'Untitled session', location: session.location,
-      date: new Date().toISOString(), avg, pref, compatible, areas, thresholdsVersion: THRESHOLDS_VERSION, synced: false }, ...records]);
+      date: new Date().toISOString(), avg, pref, compatible, ...(Array.isArray(amendments) ? { amendments } : {}),
+      areas, thresholdsVersion: THRESHOLDS_VERSION, synced: false }, ...records]);
     setAreas(Array(N_AREAS).fill(null));
     setSession({ name: '', location: '' });
   };

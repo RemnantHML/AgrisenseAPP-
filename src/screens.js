@@ -503,10 +503,20 @@ export function Amend({ navigation }) {
   const { areas, pref, saveRecord } = useApp();
   const avg = average(areas);
   if (!avg) return <Screen><P>Collect all {N_AREAS} areas first.</P></Screen>;
-  const suggestions = amendments(avg, pref);
+
+  // The list shown on this screen. The SAME list is saved with the record, so a saved
+  // record always holds exactly what the user saw (label, status and tip as displayed).
+  const suggestions = amendments(avg, pref).map(suggestion => ({
+    key: suggestion.k,
+    label: PARAMS.find(parameter => parameter.k === suggestion.k)?.label || suggestion.k,
+    status: suggestion.low ? 'Too low' : 'Too high',
+    value: suggestion.value,
+    range: [suggestion.range[0], suggestion.range[1]],
+    tip: suggestion.tip,
+  }));
 
   const save = () => {
-    saveRecord(avg, compatibleCrops(avg));
+    saveRecord(avg, compatibleCrops(avg), suggestions);
     navigation.popToTop();
     navigation.navigate('Main', { screen: 'Records' });
   };
@@ -517,10 +527,10 @@ export function Amend({ navigation }) {
       <P style={{ marginTop: 6 }}>Preferred crop: <Text style={{ fontWeight: '700' }}>{ICON[pref]} {pref}</Text></P>
       <View style={{ marginTop: 10 }}>
         {suggestions.length ? suggestions.map(suggestion => (
-          <Card key={suggestion.k}>
+          <Card key={suggestion.key}>
             <Row>
-              <Text style={{ fontWeight: '700' }}>{PARAMS.find(parameter => parameter.k === suggestion.k)?.label || suggestion.k}</Text>
-              <Tag text={suggestion.low ? 'Too low' : 'Too high'} kind="bad" />
+              <Text style={{ fontWeight: '700' }}>{suggestion.label}</Text>
+              <Tag text={suggestion.status} kind="bad" />
             </Row>
             <P>Current {formatValue(suggestion.value)} · target {suggestion.range[0]}–{suggestion.range[1]}</P>
             <Text style={{ color: C.ink, marginTop: 4 }}>{suggestion.tip}</Text>
