@@ -27,13 +27,60 @@ export function AppProvider({ children }) {
   const [records, setRecords] = useState([]);
   const [lastSync, setLastSync] = useState(null);
 
+  // ---- Keeping records consistent ----
+  // recordsRef always holds the LATEST records of the current owner. Every change is applied
+  // to that latest list (never to a copy captured earlier), so a slow sync can no longer
+  // overwrite a record saved, or bring back a record deleted, while it was running.
+  const recordsRef = useRef([]);
+  const loadedRef = useRef(false); // true once the current owner's stored records are loaded
+  const queueRef = useRef(Promise.resolve()); // storage work runs strictly one after another
+  const busyRef = useRef(false); // only one sync (or, later, one cloud deletion) at a time
+
+  const enqueue = task => {
+    queueRef.current = queueRef.current.then(task).catch(() => {});
+    return queueRef.current;
+  };
+
+  // Applies `change` (list => new list) to the latest records of `forOwner` and saves the result.
+  // Current owner (already loaded): updates the screen straight away. Otherwise (the owner
+  // switched while the work was running, or the records are still loading) the change waits its
+  // turn in the queue and is applied to the right list.
+  const updateRecords = (forOwner, change) => {
+    if (ownerRef.current === forOwner && loadedRef.current) {
+      const next = change(recordsRef.current);
+      recordsRef.current = next;
+      setRecords(next);
+      enqueue(() => AsyncStorage.setItem(storageKeys(forOwner).records, JSON.stringify(next)));
+      return;
+    }
+    enqueue(async () => {
+      if (ownerRef.current === forOwner && loadedRef.current) {
+        updateRecords(forOwner, change);
+        return;
+      }
+      const key = storageKeys(forOwner).records;
+      const stored = await AsyncStorage.getItem(key);
+      await AsyncStorage.setItem(key, JSON.stringify(change(stored ? JSON.parse(stored) : [])));
+    });
+  };
+
   // Load this owner's records. If the owner changes before a slow read finishes,
   // the old result is ignored so one owner's records never appear under another.
   useEffect(() => {
     let cancelled = false;
     const keys = storageKeys(owner);
-    AsyncStorage.getItem(keys.records).then(v => { if (!cancelled && v) setRecords(JSON.parse(v)); });
-    AsyncStorage.getItem(keys.lastSync).then(v => { if (!cancelled && v) setLastSync(v); });
+    enqueue(async () => {
+      const [storedRecords, storedSync] = await Promise.all([
+        AsyncStorage.getItem(keys.records),
+        AsyncStorage.getItem(keys.lastSync),
+      ]);
+      if (cancelled) return;
+      const list = storedRecords ? JSON.parse(storedRecords) : [];
+      recordsRef.current = list;
+      loadedRef.current = true;
+      setRecords(list);
+      if (storedSync) setLastSync(storedSync);
+    });
     return () => { cancelled = true; };
   }, [owner, loadId]);
 
@@ -41,6 +88,8 @@ export function AppProvider({ children }) {
   // temporary readings, session text, preferred crop). Stored records are never deleted.
   const switchOwner = nextOwner => {
     ownerRef.current = nextOwner;
+    recordsRef.current = [];
+    loadedRef.current = false;
     setRecords([]);
     setLastSync(null);
     setAreas(Array(N_AREAS).fill(null));
@@ -50,34 +99,35 @@ export function AppProvider({ children }) {
     setLoadId(id => id + 1);
   };
 
-  // Always writes to the storage keys of the owner the data belongs to. The on-screen
-  // state is updated only if that owner is still the current one.
-  const persist = (next, forOwner = owner) => {
-    if (ownerRef.current === forOwner) setRecords(next);
-    AsyncStorage.setItem(storageKeys(forOwner).records, JSON.stringify(next));
-  };
-
   // amendments = the recommendations exactly as they were displayed when the user saved.
   // Older records (and callers that pass nothing) simply have no "amendments" field.
   const saveRecord = (avg, compatible, amendments) => {
-    persist([{ id: String(Date.now()), name: session.name || 'Untitled session', location: session.location,
+    const record = { id: String(Date.now()), name: session.name || 'Untitled session', location: session.location,
       date: new Date().toISOString(), avg, pref, compatible, ...(Array.isArray(amendments) ? { amendments } : {}),
-      areas, thresholdsVersion: THRESHOLDS_VERSION, synced: false }, ...records]);
+      areas, thresholdsVersion: THRESHOLDS_VERSION, synced: false };
+    updateRecords(ownerRef.current, list => [record, ...list]);
     setAreas(Array(N_AREAS).fill(null));
     setSession({ name: '', location: '' });
   };
 
   // Offline-first: records stay on the phone until Firebase confirms the upload.
   const sync = async () => {
-    const syncOwner = owner; // remember who started this sync
-    const pending = records.filter(r => !r.synced);
+    if (busyRef.current) throw new Error('A sync or deletion is already running. Please wait a moment and try again.');
+    const syncOwner = ownerRef.current; // remember who started this sync
+    const pending = recordsRef.current.filter(r => !r.synced);
     if (!pending.length) return 0;
-    const ids = await pushRecords(pending, syncOwner === GUEST_OWNER ? null : syncOwner); // throws if offline, so records stay unsynced
-    persist(records.map(r => (ids.includes(r.id) ? { ...r, synced: true } : r)), syncOwner);
-    const t = new Date().toISOString();
-    if (ownerRef.current === syncOwner) setLastSync(t);
-    AsyncStorage.setItem(storageKeys(syncOwner).lastSync, t);
-    return ids.length;
+    busyRef.current = true;
+    try {
+      const ids = await pushRecords(pending, syncOwner === GUEST_OWNER ? null : syncOwner); // throws if offline, so records stay unsynced
+      // Mark only the uploaded records, on the LATEST list (records saved or deleted meanwhile are respected).
+      updateRecords(syncOwner, list => list.map(r => (ids.includes(r.id) ? { ...r, synced: true } : r)));
+      const t = new Date().toISOString();
+      if (ownerRef.current === syncOwner) setLastSync(t);
+      enqueue(() => AsyncStorage.setItem(storageKeys(syncOwner).lastSync, t));
+      return ids.length;
+    } finally {
+      busyRef.current = false;
+    }
   };
 
   return (
