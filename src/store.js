@@ -10,6 +10,7 @@ export const useApp = () => useContext(Ctx);
 // before accounts existed stay visible and nothing needs to be migrated.
 // An email account will use its own keys: records:<uid> and lastSync:<uid>.
 export const GUEST_OWNER = 'guest';
+const BUSY_MESSAGE = 'A sync or deletion is already running. Please wait a moment and try again.';
 
 export const storageKeys = owner =>
   owner === GUEST_OWNER
@@ -112,7 +113,7 @@ export function AppProvider({ children }) {
 
   // Offline-first: records stay on the phone until Firebase confirms the upload.
   const sync = async () => {
-    if (busyRef.current) throw new Error('A sync or deletion is already running. Please wait a moment and try again.');
+    if (busyRef.current) throw new Error(BUSY_MESSAGE);
     const syncOwner = ownerRef.current; // remember who started this sync
     const pending = recordsRef.current.filter(r => !r.synced);
     if (!pending.length) return 0;
@@ -130,8 +131,28 @@ export function AppProvider({ children }) {
     }
   };
 
+  // Deletes ONE record from the current owner's records on this phone only. No Firebase request is made.
+  // `shownAsSynced` is the sync status the user was shown in the confirmation dialog; if the real
+  // status changed meanwhile (for example a sync finished), nothing is deleted.
+  // Returns true when deleted, false when the record no longer exists. Throws a readable error otherwise.
+  const deleteRecord = (id, shownAsSynced) => {
+    if (busyRef.current) throw new Error(BUSY_MESSAGE);
+    const target = recordsRef.current.find(r => r.id === id);
+    if (!target) return false;
+    if (!!target.synced !== !!shownAsSynced) {
+      throw new Error('This record changed while the confirmation was open. Please open it again. Nothing was deleted.');
+    }
+    // Uploaded email-account records also exist in Firebase. Removing only the phone copy would
+    // leave the cloud copy behind, so these wait for the later cloud-deletion stage.
+    if (target.synced && ownerRef.current !== GUEST_OWNER) {
+      throw new Error('Uploaded account records cannot be deleted yet. Nothing was deleted.');
+    }
+    updateRecords(ownerRef.current, list => list.filter(r => r.id !== id)); // latest list + ordered write
+    return true;
+  };
+
   return (
-    <Ctx.Provider value={{ owner, switchOwner, device, setDevice, areas, setAreas, session, setSession, pref, setPref, records, saveRecord, lastSync, sync }}>
+    <Ctx.Provider value={{ owner, switchOwner, device, setDevice, areas, setAreas, session, setSession, pref, setPref, records, saveRecord, deleteRecord, lastSync, sync }}>
       {children}
     </Ctx.Provider>
   );

@@ -575,8 +575,8 @@ const DetailRow = ({ label, value }) => (
   </Row>
 );
 
-export function RecordDetail({ route }) {
-  const { records } = useApp();
+export function RecordDetail({ route, navigation }) {
+  const { records, owner, deleteRecord } = useApp();
   const record = records.find(item => item.id === route.params?.id);
   if (!record) {
     return <Screen><P>This record could not be found.</P></Screen>;
@@ -588,6 +588,32 @@ export function RecordDetail({ route }) {
   const compatibleText = Array.isArray(record.compatible) && record.compatible.length
     ? record.compatible.join(', ')
     : 'None';
+
+  // Which delete is allowed right now (this stage deletes from the phone only):
+  //   'unsynced' = never uploaded, so only the phone copy exists
+  //   'guest'    = uploaded in guest mode; its cloud copy cannot be removed from guest mode
+  //   null       = uploaded under an email account; cloud deletion comes in a later stage, so no button
+  const deleteKind = !record.synced ? 'unsynced' : owner === GUEST_OWNER ? 'guest' : null;
+
+  const runDelete = () => {
+    try {
+      const deleted = deleteRecord(record.id, record.synced);
+      if (deleted && navigation.isFocused()) navigation.goBack(); // back to the Records list
+    } catch (error) {
+      Alert.alert('Could not delete', error?.message || 'Something went wrong. Nothing was deleted.');
+    }
+  };
+
+  const confirmDelete = () => {
+    const details = `${record.name || 'Untitled session'}\nSaved: ${dateText}\n\n`;
+    const warning = deleteKind === 'guest'
+      ? 'This record was uploaded while using guest mode. Its cloud copy cannot be removed from guest mode and will remain in Firebase. Delete it from this phone only? This cannot be undone.'
+      : 'This record has not been uploaded. It will be deleted from this phone. This cannot be undone.';
+    Alert.alert('Delete this record?', details + warning, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: runDelete },
+    ]);
+  };
 
   return (
     <Screen>
@@ -645,6 +671,10 @@ export function RecordDetail({ route }) {
           <Tag text={record.synced ? 'Synced' : 'On this phone only'} kind={record.synced ? 'ok' : 'warn'} />
         </Row>
       </Card>
+
+      {deleteKind ? (
+        <Btn title="Delete record" outline danger onPress={confirmDelete} style={{ marginTop: 20 }} />
+      ) : null}
     </Screen>
   );
 }
