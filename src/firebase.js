@@ -10,7 +10,7 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
 } from 'firebase/auth';
-import { getDatabase, ref, update, goOnline, goOffline } from 'firebase/database';
+import { getDatabase, ref, update, onValue, goOnline, goOffline } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const config = {
@@ -144,6 +144,61 @@ async function userForUpload(ownerUid) {
     throw new Error('Please log in again to sync this account.');
   }
   return current;
+}
+
+// ---- Deleting an uploaded record from the cloud ----
+// Messages here are written for the user. They are shown as they are.
+const MSG_OFFLINE = 'No internet connection. Connect to the internet to delete an uploaded record. Nothing was deleted.';
+const MSG_LOGIN = 'Please log in again to delete this record. Nothing was deleted.';
+const MSG_FAILED = 'The cloud copy could not be deleted, so the record was kept on this phone. Please try again.';
+
+const friendly = message => Object.assign(new Error(message), { friendly: true });
+
+// Resolves once Firebase reports it is connected (".info/connected" is true), otherwise
+// rejects after maxMs. This is how we know we are really online BEFORE sending the delete.
+const waitForConnection = maxMs =>
+  new Promise((resolve, reject) => {
+    let off = null;
+    let finished = false;
+    const done = (fn, value) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      off?.();
+      fn(value);
+    };
+    const timer = setTimeout(() => done(reject, friendly(MSG_OFFLINE)), maxMs);
+    off = onValue(
+      ref(db, '.info/connected'),
+      snapshot => { if (snapshot.val() === true) done(resolve); },
+      () => done(reject, friendly(MSG_OFFLINE)),
+    );
+    if (finished) off();
+  });
+
+// Deletes logs/<ownerUid>/<recordId> from Firebase. Resolves only after Firebase confirms.
+// Throws an Error whose message can be shown to the user; nothing is deleted on failure.
+export async function deleteCloudRecord(ownerUid, recordId) {
+  // A uid or id that is empty or contains / . # $ [ ] could point at the wrong path
+  // (an empty id would mean "all of this user's records"), so refuse before doing anything.
+  const safeKey = key => typeof key === 'string' && /^[^\/.#$\[\]]+$/.test(key);
+  if (!safeKey(ownerUid) || !safeKey(recordId)) throw friendly(MSG_FAILED);
+  try {
+    requireConfig();
+    goOnline(db);
+    try {
+      await auth.authStateReady?.();
+      const user = auth.currentUser;
+      // Only the signed-in EMAIL account that owns the records on screen may delete them.
+      if (!user || user.isAnonymous || user.uid !== ownerUid) throw friendly(MSG_LOGIN);
+      await waitForConnection(6000);
+      await withTimeout(update(ref(db), { [`logs/${ownerUid}/${recordId}`]: null }), 15000, 'Delete');
+    } finally {
+      goOffline(db);
+    }
+  } catch (error) {
+    throw error?.friendly ? error : friendly(MSG_FAILED);
+  }
 }
 
 // Uploads pending records in ONE batched write. Returns the ids Firebase confirmed.

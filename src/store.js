@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { N_AREAS, THRESHOLDS_VERSION } from './data';
-import { pushRecords } from './firebase';
+import { pushRecords, deleteCloudRecord } from './firebase';
 const Ctx = createContext();
 export const useApp = () => useContext(Ctx);
 
@@ -131,23 +131,32 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Deletes ONE record from the current owner's records on this phone only. No Firebase request is made.
+  // Deletes ONE record of the current owner.
+  //  - not uploaded, or uploaded in guest mode: removed from this phone only (no Firebase request)
+  //  - uploaded under an email account: the Firebase copy is deleted FIRST; the phone copy is
+  //    removed only after Firebase confirms. If that fails, an error is thrown and nothing changes.
   // `shownAsSynced` is the sync status the user was shown in the confirmation dialog; if the real
   // status changed meanwhile (for example a sync finished), nothing is deleted.
-  // Returns true when deleted, false when the record no longer exists. Throws a readable error otherwise.
-  const deleteRecord = (id, shownAsSynced) => {
+  // Resolves true when deleted, false when the record no longer exists. Rejects with a readable error otherwise.
+  const deleteRecord = async (id, shownAsSynced) => {
     if (busyRef.current) throw new Error(BUSY_MESSAGE);
+    const deleteOwner = ownerRef.current; // remember whose record this is, even if the owner changes while waiting
     const target = recordsRef.current.find(r => r.id === id);
     if (!target) return false;
     if (!!target.synced !== !!shownAsSynced) {
       throw new Error('This record changed while the confirmation was open. Please open it again. Nothing was deleted.');
     }
-    // Uploaded email-account records also exist in Firebase. Removing only the phone copy would
-    // leave the cloud copy behind, so these wait for the later cloud-deletion stage.
-    if (target.synced && ownerRef.current !== GUEST_OWNER) {
-      throw new Error('Uploaded account records cannot be deleted yet. Nothing was deleted.');
+    if (target.synced && deleteOwner !== GUEST_OWNER) {
+      busyRef.current = true; // a sync cannot start while the cloud deletion runs
+      try {
+        await deleteCloudRecord(deleteOwner, id); // throws if offline, signed out or Firebase refuses
+        updateRecords(deleteOwner, list => list.filter(r => r.id !== id)); // only now: latest list + ordered write
+      } finally {
+        busyRef.current = false;
+      }
+      return true;
     }
-    updateRecords(ownerRef.current, list => list.filter(r => r.id !== id)); // latest list + ordered write
+    updateRecords(deleteOwner, list => list.filter(r => r.id !== id)); // latest list + ordered write
     return true;
   };
 

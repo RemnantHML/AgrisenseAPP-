@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -577,6 +577,8 @@ const DetailRow = ({ label, value }) => (
 
 export function RecordDetail({ route, navigation }) {
   const { records, owner, deleteRecord } = useApp();
+  const [deleting, setDeleting] = useState(false);
+  const deletingRef = useRef(false); // blocks a second delete started before the screen redraws
   const record = records.find(item => item.id === route.params?.id);
   if (!record) {
     return <Screen><P>This record could not be found.</P></Screen>;
@@ -589,18 +591,24 @@ export function RecordDetail({ route, navigation }) {
     ? record.compatible.join(', ')
     : 'None';
 
-  // Which delete is allowed right now (this stage deletes from the phone only):
+  // Which kind of delete applies (decides the warning text):
   //   'unsynced' = never uploaded, so only the phone copy exists
   //   'guest'    = uploaded in guest mode; its cloud copy cannot be removed from guest mode
-  //   null       = uploaded under an email account; cloud deletion comes in a later stage, so no button
-  const deleteKind = !record.synced ? 'unsynced' : owner === GUEST_OWNER ? 'guest' : null;
+  //   'account'  = uploaded under an email account; deleted from the cloud account first, then the phone
+  const deleteKind = !record.synced ? 'unsynced' : owner === GUEST_OWNER ? 'guest' : 'account';
 
-  const runDelete = () => {
+  const runDelete = async () => {
+    if (deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
     try {
-      const deleted = deleteRecord(record.id, record.synced);
+      const deleted = await deleteRecord(record.id, record.synced);
       if (deleted && navigation.isFocused()) navigation.goBack(); // back to the Records list
     } catch (error) {
       Alert.alert('Could not delete', error?.message || 'Something went wrong. Nothing was deleted.');
+    } finally {
+      deletingRef.current = false;
+      setDeleting(false);
     }
   };
 
@@ -608,7 +616,9 @@ export function RecordDetail({ route, navigation }) {
     const details = `${record.name || 'Untitled session'}\nSaved: ${dateText}\n\n`;
     const warning = deleteKind === 'guest'
       ? 'This record was uploaded while using guest mode. Its cloud copy cannot be removed from guest mode and will remain in Firebase. Delete it from this phone only? This cannot be undone.'
-      : 'This record has not been uploaded. It will be deleted from this phone. This cannot be undone.';
+      : deleteKind === 'account'
+        ? 'This record will be deleted from both this phone and your cloud account. It cannot be recovered. An internet connection is required.'
+        : 'This record has not been uploaded. It will be deleted from this phone. This cannot be undone.';
     Alert.alert('Delete this record?', details + warning, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: runDelete },
@@ -672,9 +682,14 @@ export function RecordDetail({ route, navigation }) {
         </Row>
       </Card>
 
-      {deleteKind ? (
-        <Btn title="Delete record" outline danger onPress={confirmDelete} style={{ marginTop: 20 }} />
-      ) : null}
+      <Btn
+        title={deleting ? 'Deleting…' : 'Delete record'}
+        outline
+        danger
+        disabled={deleting}
+        onPress={confirmDelete}
+        style={{ marginTop: 20 }}
+      />
     </Screen>
   );
 }
